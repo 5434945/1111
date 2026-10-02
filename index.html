@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Blur Studio - 图片高斯模糊工具</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" defer></script>
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true"></div>
+          <div>
+            <h1>Blur Studio</h1>
+            <span>图片隐私模糊</span>
+          </div>
+        </div>
+
+        <div class="top-actions">
+          <input id="fileInput" type="file" accept="image/*" multiple hidden />
+          <button class="button primary" id="uploadBtn" type="button">
+            <i data-lucide="upload"></i>
+            导入图片
+          </button>
+          <button class="button" id="pasteBtn" type="button" title="粘贴剪贴板图片">
+            <i data-lucide="clipboard"></i>
+            粘贴
+          </button>
+          <button class="button" id="exportCurrentBtn" type="button">
+            <i data-lucide="download"></i>
+            当前导出
+          </button>
+          <button class="button" id="exportZipBtn" type="button">
+            <i data-lucide="archive"></i>
+            批量 ZIP
+          </button>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <aside class="sidebar">
+          <section class="drop-zone" id="dropZone">
+            <div class="drop-icon" aria-hidden="true">
+              <i data-lucide="image-plus"></i>
+            </div>
+            <strong>拖入图片</strong>
+            <span>支持多选、拖拽、截图粘贴</span>
+          </section>
+
+          <section class="panel compact">
+            <div class="panel-heading">
+              <h2>批量</h2>
+            </div>
+            <div class="button-grid">
+              <button class="button" id="applyBlurAllBtn" type="button">
+                <i data-lucide="copy-check"></i>
+                同步模糊
+              </button>
+              <button class="button" id="detectAllBtn" type="button">
+                <i data-lucide="scan-face"></i>
+                批量人脸
+              </button>
+            </div>
+          </section>
+
+          <section class="panel image-panel">
+            <div class="panel-heading">
+              <h2>图片</h2>
+              <span id="imageCount">0</span>
+            </div>
+            <div class="image-list" id="imageList"></div>
+          </section>
+        </aside>
+
+        <section class="stage-shell">
+          <div class="stage-toolbar">
+            <div class="tool-group" role="group" aria-label="编辑模式">
+              <button class="tool-button active" data-mode="brush" type="button" title="画笔模糊">
+                <i data-lucide="brush"></i>
+              </button>
+              <button class="tool-button" data-mode="rect" type="button" title="矩形模糊">
+                <i data-lucide="square-dashed"></i>
+              </button>
+              <button class="tool-button" data-mode="face" type="button" title="人脸模糊">
+                <i data-lucide="scan-face"></i>
+              </button>
+              <button class="tool-button" data-mode="inspect" type="button" title="查看">
+                <i data-lucide="mouse-pointer-2"></i>
+              </button>
+            </div>
+
+            <div class="tool-group">
+              <button class="tool-button" id="undoBtn" type="button" title="撤销">
+                <i data-lucide="undo-2"></i>
+              </button>
+              <button class="tool-button" id="clearLocalBtn" type="button" title="清除局部模糊">
+                <i data-lucide="eraser"></i>
+              </button>
+              <button class="tool-button danger" id="removeImageBtn" type="button" title="移除当前图片">
+                <i data-lucide="trash-2"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="canvas-wrap" id="canvasWrap">
+            <canvas id="editorCanvas"></canvas>
+            <div class="empty-state" id="emptyState">
+              <div class="sample-visual" aria-hidden="true">
+                <div class="sample-photo">
+                  <div class="sample-face"></div>
+                  <div class="sample-line one"></div>
+                  <div class="sample-line two"></div>
+                  <div class="sample-blur"></div>
+                </div>
+              </div>
+              <strong>导入图片后开始编辑</strong>
+              <span>本地预览，本地导出</span>
+            </div>
+          </div>
+
+          <footer class="statusbar">
+            <span id="imageMeta">未选择图片</span>
+            <span id="workStatus">就绪</span>
+          </footer>
+        </section>
+
+        <aside class="inspector">
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>模糊</h2>
+            </div>
+
+            <label class="control">
+              <span>全图高斯</span>
+              <output id="globalBlurValue">0px</output>
+              <input id="globalBlur" type="range" min="0" max="80" value="0" step="1" />
+            </label>
+
+            <label class="control">
+              <span>局部强度</span>
+              <output id="localBlurValue">24px</output>
+              <input id="localBlur" type="range" min="4" max="90" value="24" step="1" />
+            </label>
+
+            <label class="control">
+              <span>画笔尺寸</span>
+              <output id="brushSizeValue">56px</output>
+              <input id="brushSize" type="range" min="12" max="180" value="56" step="2" />
+            </label>
+          </section>
+
+          <section class="panel wallpaper-panel">
+            <div class="panel-heading">
+              <h2>壁纸</h2>
+              <label class="switch">
+                <input id="wallpaperToggle" type="checkbox" />
+                <span></span>
+              </label>
+            </div>
+
+            <div class="wallpaper-preview" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+
+            <label class="control">
+              <span>Apple 模糊</span>
+              <output id="wallpaperStrengthValue">72%</output>
+              <input id="wallpaperStrength" type="range" min="35" max="100" value="72" step="1" />
+            </label>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>人脸</h2>
+              <button class="mini-button" id="detectFacesBtn" type="button">
+                <i data-lucide="scan-search"></i>
+                检测
+              </button>
+            </div>
+
+            <label class="control">
+              <span>保护范围</span>
+              <output id="facePaddingValue">28%</output>
+              <input id="facePadding" type="range" min="0" max="60" value="28" step="2" />
+            </label>
+
+            <div class="face-list" id="faceList">
+              <div class="muted-line">暂无人脸区域</div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>对比</h2>
+              <label class="switch">
+                <input id="compareToggle" type="checkbox" />
+                <span></span>
+              </label>
+            </div>
+
+            <label class="control">
+              <span>原图范围</span>
+              <output id="compareValue">50%</output>
+              <input id="compareRange" type="range" min="5" max="95" value="50" step="1" />
+            </label>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>导出</h2>
+            </div>
+
+            <label class="select-control">
+              <span>格式</span>
+              <select id="exportFormat">
+                <option value="image/png">PNG</option>
+                <option value="image/jpeg">JPG</option>
+                <option value="image/webp">WebP</option>
+              </select>
+            </label>
+
+            <label class="control">
+              <span>质量</span>
+              <output id="qualityValue">92%</output>
+              <input id="qualityRange" type="range" min="40" max="100" value="92" step="1" />
+            </label>
+
+            <label class="select-control">
+              <span>尺寸</span>
+              <select id="exportSize">
+                <option value="original">原尺寸</option>
+                <option value="half">50%</option>
+                <option value="max1600">最长边 1600</option>
+              </select>
+            </label>
+          </section>
+        </aside>
+      </main>
+    </div>
+
+    <div class="toast-region" id="toastRegion" aria-live="polite"></div>
+  </body>
+</html>
